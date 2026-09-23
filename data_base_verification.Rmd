@@ -1,0 +1,1234 @@
+---
+title: "Data base verification"
+author: "Jhennifer Nascimento"
+date: "2025-08-17"
+output: html_document
+---
+
+
+
+## Verificação das bases de dados do projeto Travessia da Saúde
+
+Este relatório tem como objetivo central documentar e facilitar a checagem da coleta de dados utilizada no projeto Travessia da Saúde. O código em R desenvolvido para essa etapa gera, como saída, uma tabela de conferência, em que cada variável é acompanhada por um indicador lógico (TRUE ou FALSE). Esse indicador aponta se o dado em questão foi corretamente migrado da base bruta para a base final, permitindo identificar rapidamente eventuais falhas ou inconsistências no processo de coleta.
+
+## Base de dados municipal
+Essa base reúne dados secundários agregados por município, extraídos do SISCAN, INCA, IBGE e CNES. Ela fornece informações sobre exames realizados, estimativas de incidência de câncer, demografia, estrutura dos serviços de saúde e equipamentos disponíveis.
+
+```{r, warning = FALSE, message = FALSE}
+
+library(readxl)
+library(DT)
+
+# Lê as abas do arquivo no mesmo diretório do .Rmd
+arquivo <- "dados_municipios.xlsx"
+stopifnot(file.exists(arquivo))
+
+base_mama <- read_excel(arquivo, sheet = "MAMA")
+base_colo <- read_excel(arquivo, sheet = "COLO")
+
+# Tabelas interativas
+
+# mama
+datatable(base_mama, options = list(pageLength = 10, scrollX = TRUE))
+
+#colo
+datatable(base_colo, options = list(pageLength = 10, scrollX = TRUE))
+
+
+
+```
+
+### Verificação da base Mama
+#### Mama - População feminina e população elegível
+
+```{r, warning = FALSE, message = FALSE}
+######## MAMA ###########
+
+# 1. Pacotes
+library(readxl)
+library(dplyr)
+library(stringr)
+
+# 2. Carregar base do projeto com as duas variáveis
+base_mama_pop <- read_excel("dados_municipios.xlsx", sheet = "MAMA") %>%
+  select(
+    Municipio_mun,
+    COD_municipio_mun,
+    starts_with("POP_Feminina_"),
+    starts_with("POP_Elegivel_MAMA_")
+  ) %>%
+  mutate(cod_ibge_base = substr(as.character(COD_municipio_mun), 1, 6))
+
+# 3. Função para comparar as populações
+comparar_pop_feminina_mama <- function(ano, base_mama_pop) {
+  
+  col_total_projeto <- paste0("POP_Feminina_", ano, "_mun")
+  col_elegivel_projeto <- paste0("POP_Elegivel_MAMA_", ano, "_mun")
+  arquivo <- paste0("DATASUS_Populacao_Feminina_", ano, ".xlsx")
+  
+  base_datasus <- read_excel(arquivo) %>%
+    rename(municipio_raw = `Município`) %>%
+    mutate(
+      cod_ibge_datasus = str_extract(municipio_raw, "^\\d{6}"),
+      nome_municipio = str_remove(municipio_raw, "^\\d{6}\\s+"),
+      cod_ibge_datasus = as.character(cod_ibge_datasus),
+      elegivel_mama = rowSums(select(., `50 anos`:`69 anos`), na.rm = TRUE)
+    ) %>%
+    select(cod_ibge_datasus, nome_municipio, Total, elegivel_mama)
+  
+  comparacao <- inner_join(
+    base_datasus,
+    base_mama_pop,
+    by = c("cod_ibge_datasus" = "cod_ibge_base")
+  ) %>%
+    mutate(
+      valor_projeto_total = .data[[col_total_projeto]],
+      valor_projeto_elegivel = .data[[col_elegivel_projeto]],
+      iguais_total = Total == valor_projeto_total,
+      iguais_elegivel = elegivel_mama == valor_projeto_elegivel,
+      diferenca_total = Total - valor_projeto_total,
+      diferenca_elegivel = elegivel_mama - valor_projeto_elegivel
+    ) %>%
+    select(
+      cod_ibge = cod_ibge_datasus,
+      Municipio_datasus = nome_municipio,
+      Municipio_base = Municipio_mun,
+      Total_datasus = Total,
+      valor_projeto_total,
+      iguais_total,
+      diferenca_total,
+      elegivel_datasus = elegivel_mama,
+      valor_projeto_elegivel,
+      iguais_elegivel,
+      diferenca_elegivel
+    )
+  
+  return(comparacao)
+}
+
+# 4. Rodar comparação para todos os anos (2019–2024)
+comparacoes_pop_feminina_mama <- list()
+
+for (ano in 2019:2024) {
+  comparacoes_pop_feminina_mama[[as.character(ano)]] <- comparar_pop_feminina_mama(ano, base_mama_pop)
+}
+
+# 5. Conferência visual
+
+DT::datatable(comparacoes_pop_feminina_mama[["2019"]])
+DT::datatable(comparacoes_pop_feminina_mama[["2020"]])
+DT::datatable(comparacoes_pop_feminina_mama[["2021"]])
+DT::datatable(comparacoes_pop_feminina_mama[["2022"]])
+DT::datatable(comparacoes_pop_feminina_mama[["2023"]])
+DT::datatable(comparacoes_pop_feminina_mama[["2024"]])
+
+```
+
+
+#### Mama - Mamografias
+
+```{r, warning = FALSE, message = FALSE}
+############### Municipios ####################
+
+# 1. Pacotes
+library(readxl)
+library(dplyr)
+library(stringr)
+
+
+# 2. Carregar base com mamografias
+base_mama <- read_excel("dados_municipios.xlsx", sheet = "MAMA") %>%
+  select(Municipio_mun, COD_municipio_mun, starts_with("Mamografias")) %>%
+  mutate(
+    cod_ibge_base = substr(as.character(COD_municipio_mun), 1, 6)  # agora com 6 dígitos
+  )
+
+
+# 3. Função para comparar mamografias
+comparar_mamografias <- function(ano, base_mama) {
+  
+  # Nome da variável na base do projeto
+  col_projeto <- paste0("Mamografias_", ano, "_mun")
+  
+  # Nome do arquivo SISCAN
+  arquivo <- paste0("SISCAN_Mamografias_", ano, ".xlsx")
+  
+  # Leitura da planilha do SISCAN
+  base_siscan <- read_excel(arquivo) %>%
+    rename(municipio_residencia = `Munic.de residencia`) %>%
+    mutate(
+      cod_ibge_siscan = str_extract(municipio_residencia, "^\\d{6,7}"),
+      nome_municipio = str_remove(municipio_residencia, "^\\d{6,7}\\s+"),
+      cod_ibge_siscan = as.character(cod_ibge_siscan),
+      Exames = as.numeric(Exames)
+    ) %>%
+    select(cod_ibge_siscan, nome_municipio, Exames)
+  
+  # Comparação com a base do projeto
+  base_comparada <- inner_join(
+    base_siscan,
+    base_mama,
+    by = c("cod_ibge_siscan" = "cod_ibge_base")
+  ) %>%
+    mutate(
+      valor_projeto = .data[[col_projeto]],
+      iguais = Exames == valor_projeto,
+      diferenca = Exames - valor_projeto
+    ) %>%
+    select(
+      cod_ibge = cod_ibge_siscan,
+      Municipio_siscan = nome_municipio,
+      Municipio_base = Municipio_mun,
+      Exames_siscan = Exames,
+      valor_projeto,
+      iguais,
+      diferenca
+    )
+  
+  return(base_comparada)
+}
+
+# 4. Rodar comparação para todos os anos (2019–2024)
+mamografia_comparacoes <- list()
+
+for (ano in 2019:2024) {
+  mamografia_comparacoes[[as.character(ano)]] <- comparar_mamografias(ano, base_mama)
+}
+
+
+# 5. Conferir visualmente
+DT::datatable(mamografia_comparacoes[["2019"]])
+DT::datatable(mamografia_comparacoes[["2020"]])
+DT::datatable(mamografia_comparacoes[["2021"]])
+DT::datatable(mamografia_comparacoes[["2022"]])
+DT::datatable(mamografia_comparacoes[["2023"]])
+DT::datatable(mamografia_comparacoes[["2024"]])
+```
+
+
+
+#### Mama - Histopatologico
+```{r, warning = FALSE, message = FALSE}
+
+######## MAMA ###########
+
+# 1. Pacotes
+library(readxl)
+library(dplyr)
+library(stringr)
+
+# 2. Carregar base com exames histologicos
+base_mama <- read_excel("dados_municipios.xlsx", sheet = "MAMA") %>%
+  select(Municipio_mun, COD_municipio_mun, starts_with("Mamografias"), starts_with("Histo_Mama")) %>%
+  mutate(cod_ibge_base = substr(as.character(COD_municipio_mun), 1, 6))
+
+
+# 3. Função para comparar exames histopatologicos
+comparar_histopatologico_mama <- function(ano, base_mama) {
+  
+  col_projeto <- paste0("Histo_Mama_", ano, "_mun")
+  arquivo <- paste0("SISCAN_Histopatologico_Mama_", ano, ".xlsx")
+  
+  base_siscan <- read_excel(arquivo) %>%
+    rename(municipio_residencia = `Munic.de residencia`) %>%
+    mutate(
+      cod_ibge_siscan = str_extract(municipio_residencia, "^\\d{6}"),
+      nome_municipio = str_remove(municipio_residencia, "^\\d{6}\\s+"),
+      cod_ibge_siscan = as.character(cod_ibge_siscan),
+      Exames = as.numeric(Exames)
+    ) %>%
+    select(cod_ibge_siscan, nome_municipio, Exames)
+  
+  comparacao <- inner_join(
+    base_siscan,
+    base_mama,
+    by = c("cod_ibge_siscan" = "cod_ibge_base")
+  ) %>%
+    mutate(
+      valor_projeto = .data[[col_projeto]],
+      iguais = Exames == valor_projeto,
+      diferenca = Exames - valor_projeto
+    ) %>%
+    select(
+      cod_ibge = cod_ibge_siscan,
+      Municipio_siscan = nome_municipio,
+      Municipio_base = Municipio_mun,
+      Exames_siscan = Exames,
+      valor_projeto,
+      iguais,
+      diferenca
+    )
+  
+  return(comparacao)
+}
+
+# 4. Rodar comparação para todos os anos (2019–2024)
+comparacoes_histo_mama <- list()
+
+for (ano in 2019:2024) {
+  comparacoes_histo_mama[[as.character(ano)]] <- comparar_histopatologico_mama(ano, base_mama)
+}
+
+# 5. Conferir visualmente
+DT::datatable(comparacoes_histo_mama[["2019"]])
+DT::datatable(comparacoes_histo_mama[["2020"]])
+DT::datatable(comparacoes_histo_mama[["2021"]])
+DT::datatable(comparacoes_histo_mama[["2022"]])
+DT::datatable(comparacoes_histo_mama[["2023"]])
+DT::datatable(comparacoes_histo_mama[["2024"]])
+
+```
+
+#### Mama - Histopatologico alterado
+```{r, warning = FALSE, message = FALSE}
+######## MAMA ###########
+
+# 1. Pacotes
+library(readxl)
+library(dplyr)
+library(stringr)
+
+# 2. Carregar base com exames histologicos alterado
+base_mama <- read_excel("dados_municipios.xlsx", sheet = "MAMA") %>%
+  select(Municipio_mun, COD_municipio_mun, starts_with("Histo_Alterado_Mama")) %>%
+  mutate(cod_ibge_base = substr(as.character(COD_municipio_mun), 1, 6))
+
+
+# 3. Função para comparar exames histopatologicos
+comparar_histo_alterado_mama <- function(ano, base_mama) {
+  
+  col_projeto <- paste0("Histo_Alterado_Mama_", ano, "_mun")
+  arquivo <- paste0("SISCAN_Histopatologico_Resultado_Mama_", ano, ".xlsx")
+  
+  base_siscan <- read_excel(arquivo) %>%
+    rename(municipio_residencia = `Munic.de residencia`) %>%
+    mutate(
+      cod_ibge_siscan = str_extract(municipio_residencia, "^\\d{6}"),
+      nome_municipio = str_remove(municipio_residencia, "^\\d{6}\\s+"),
+      cod_ibge_siscan = as.character(cod_ibge_siscan),
+      Total = as.numeric(Total)
+    ) %>%
+    select(cod_ibge_siscan, nome_municipio, Total)
+  
+  comparacao <- inner_join(
+    base_siscan,
+    base_mama,
+    by = c("cod_ibge_siscan" = "cod_ibge_base")
+  ) %>%
+    mutate(
+      valor_projeto = .data[[col_projeto]],
+      iguais = Total == valor_projeto,
+      diferenca = Total - valor_projeto
+    ) %>%
+    select(
+      cod_ibge = cod_ibge_siscan,
+      Municipio_siscan = nome_municipio,
+      Municipio_base = Municipio_mun,
+      Total_siscan = Total,
+      valor_projeto,
+      iguais,
+      diferenca
+    )
+  
+  return(comparacao)
+}
+
+# 4. Rodar comparação para todos os anos (2019–2024)
+comparacoes_histo_alterado_mama <- list()
+
+for (ano in 2019:2024) {
+  comparacoes_histo_alterado_mama[[as.character(ano)]] <- comparar_histo_alterado_mama(ano, base_mama)
+}
+
+# 5. Conferir visualmente
+DT::datatable(comparacoes_histo_alterado_mama[["2019"]])
+DT::datatable(comparacoes_histo_alterado_mama[["2020"]])
+DT::datatable(comparacoes_histo_alterado_mama[["2021"]])
+DT::datatable(comparacoes_histo_alterado_mama[["2022"]])
+DT::datatable(comparacoes_histo_alterado_mama[["2023"]])
+DT::datatable(comparacoes_histo_alterado_mama[["2024"]])
+```
+
+#### Mama - Cancer
+```{r, warning = FALSE, message = FALSE}
+######## MAMA ###########
+
+# 1. Pacotes
+library(readxl)
+library(dplyr)
+library(stringr)
+
+# 2. Carregar base com diagnósticos de câncer de mama confirmados
+base_mama <- read_excel("dados_municipios.xlsx", sheet = "MAMA") %>%
+  select(Municipio_mun, COD_municipio_mun, starts_with("Cancer_Mama")) %>%
+  mutate(
+    cod_ibge_base = substr(as.character(COD_municipio_mun), 1, 6)
+  )
+
+# 3. Função para comparar casos cancer
+comparar_casos_cancer_mama <- function(ano, base_mama) {
+  
+  col_projeto <- paste0("Cancer_Mama_", ano, "_mun")
+  arquivo <- paste0("SISCAN_Cancer_Mama_", ano, ".xlsx")
+  
+  base_siscan <- read_excel(arquivo) %>%
+    rename(municipio_residencia = `Munic.de residencia`) %>%
+    mutate(
+      cod_ibge_siscan = str_extract(municipio_residencia, "^\\d{6}"),
+      nome_municipio = str_remove(municipio_residencia, "^\\d{6}\\s+"),
+      cod_ibge_siscan = as.character(cod_ibge_siscan),
+      Pacientes = as.numeric(Pacientes)
+    ) %>%
+    select(cod_ibge_siscan, nome_municipio, Pacientes)
+  
+  comparacao <- inner_join(
+    base_siscan,
+    base_mama,
+    by = c("cod_ibge_siscan" = "cod_ibge_base")
+  ) %>%
+    mutate(
+      valor_projeto = .data[[col_projeto]],
+      iguais = Pacientes == valor_projeto,
+      diferenca = Pacientes - valor_projeto
+    ) %>%
+    select(
+      cod_ibge = cod_ibge_siscan,
+      Municipio_siscan = nome_municipio,
+      Municipio_base = Municipio_mun,
+      Pacientes_siscan = Pacientes,
+      valor_projeto,
+      iguais,
+      diferenca
+    )
+  
+  return(comparacao)
+}
+
+# 4. Rodar comparação para todos os anos (2019–2024)
+comparacoes_cancer_mama <- list()
+
+for (ano in 2019:2024) {
+  comparacoes_cancer_mama[[as.character(ano)]] <- comparar_casos_cancer_mama(ano, base_mama)
+}
+
+# 5. Conferir visualmente
+DT::datatable(comparacoes_cancer_mama[["2019"]])
+DT::datatable(comparacoes_cancer_mama[["2020"]])
+DT::datatable(comparacoes_cancer_mama[["2021"]])
+DT::datatable(comparacoes_cancer_mama[["2022"]])
+DT::datatable(comparacoes_cancer_mama[["2023"]])
+DT::datatable(comparacoes_cancer_mama[["2024"]])
+
+```
+
+#### Mama - Tratamento
+```{r, warning = FALSE, message = FALSE}
+############ Tratamento Municipios ###########
+# 1. Pacotes
+library(readxl)
+library(dplyr)
+library(stringi)
+library(stringr)
+
+# 2. Carregar base municipal sem duplicar o código
+base_mun_mama <- read_excel("dados_municipios.xlsx", sheet = "MAMA") %>%
+  select(Municipio_mun, COD_municipio_mun, starts_with("tratamento_mama"))
+
+base_mun_colo <- read_excel("dados_municipios.xlsx", sheet = "COLO") %>%
+  select(Municipio_mun, starts_with("tratamento_colo"))
+
+# Junta as duas mantendo apenas uma coluna de COD_municipio_mun
+base_mun <- full_join(base_mun_mama, base_mun_colo, by = "Municipio_mun")
+
+
+# 3. Função para comparação usando COD IBGE
+comparar_tratamentos <- function(ano, tipo, base_mun, arquivo_inca) {
+  
+  # Nome da coluna correspondente ao ano na base municipal
+  col_mun <- paste0("tratamento_", tipo, "_", ano, "_mun")
+  
+  # Base municipal com código IBGE como string
+  base_projeto <- base_mun %>%
+    select(Municipio_mun, COD_municipio_mun, !!sym(col_mun)) %>%
+    mutate(
+      cod_ibge_base = as.character(COD_municipio_mun)
+    )
+  
+  # Lê o arquivo do INCA e extrai o código IBGE (7 dígitos)
+  base_inca <- read_excel(arquivo_inca) %>%
+    mutate(
+      Total = as.numeric(Total),
+      cod_ibge_inca = str_extract(Municipio, "\\d{7}")  # só o código
+    ) %>%
+    select(cod_ibge_inca, Municipio, Total)
+  
+  # Faz join pelo código IBGE
+  comparacao <- inner_join(
+    base_inca,
+    base_projeto,
+    by = c("cod_ibge_inca" = "cod_ibge_base")
+  ) %>%
+    mutate(
+      valor_projeto = .data[[col_mun]],
+      iguais = Total == valor_projeto,
+      diferenca = Total - valor_projeto
+    ) %>%
+    select(
+      cod_ibge = cod_ibge_inca,
+      Municipio_inca = Municipio,
+      Municipio_base = Municipio_mun,
+      Total_inca = Total,
+      valor_projeto,
+      iguais,
+      diferenca
+    )
+  
+  return(comparacao)
+}
+
+
+# 4. Lista dos arquivos XLSX do INCA (já limpos)
+arquivos_inca <- list(
+  mama_2019 = "INCA_Tratamento_Mama_2019.xlsx",
+  mama_2020 = "INCA_Tratamento_Mama_2020.xlsx",
+  mama_2021 = "INCA_Tratamento_Mama_2021.xlsx",
+  mama_2022 = "INCA_Tratamento_Mama_2022.xlsx",
+  mama_2023 = "INCA_Tratamento_Mama_2023.xlsx",
+  colo_2019 = "INCA_Tratamento_Colo_2019.xlsx",
+  colo_2020 = "INCA_Tratamento_Colo_2020.xlsx",
+  colo_2021 = "INCA_Tratamento_Colo_2021.xlsx",
+  colo_2022 = "INCA_Tratamento_Colo_2022.xlsx",
+  colo_2023 = "INCA_Tratamento_Colo_2023.xlsx"
+)
+
+
+# 5. Gerar comparações para todos os anos/tipos
+comparacoes <- list()
+
+for (tipo in c("mama", "colo")) {
+  for (ano in 2019:2023) {
+    key <- paste0(tipo, "_", ano)
+    arquivo_inca <- arquivos_inca[[key]]
+    
+    comparacoes[[key]] <- comparar_tratamentos(
+      ano = ano,
+      tipo = tipo,
+      base_mun = base_mun,
+      arquivo_inca = arquivo_inca
+    )
+  }
+}
+
+
+# 6. Abrir e conferir
+DT::datatable(comparacoes[["mama_2019"]])  # compara mama 2019
+DT::datatable(comparacoes[["mama_2020"]])  # compara mama 2020
+DT::datatable(comparacoes[["mama_2021"]])  # compara mama 2021
+DT::datatable(comparacoes[["mama_2022"]])  # compara mama 2022
+DT::datatable(comparacoes[["mama_2023"]])  # compara mama 2023
+```
+
+#### Mama - Categorias
+```{r, warning = FALSE, message = FALSE}
+############### Municipios ####################
+
+# 1. Pacotes
+library(readxl)
+library(dplyr)
+library(stringr)
+
+# 2. Carregar base com resultados de mamografias (categorias)
+base_mama_resultados <- read_excel("dados_municipios.xlsx", sheet = "MAMA") %>%
+  select(Municipio_mun, COD_municipio_mun, starts_with("Categoria_")) %>%
+  mutate(cod_ibge_base = substr(as.character(COD_municipio_mun), 1, 6))
+
+# 3. Função para comparar categorias de mamografia (BIRADS)
+comparar_categorias_mamografia <- function(ano, base_mama_resultados) {
+  
+  arquivo <- paste0("SISCAN_Mamografias_Resultados_", ano, ".xlsx")
+  
+  base_siscan <- read_excel(arquivo) %>%
+    rename(municipio_residencia = `Munic.de residencia`) %>%
+    mutate(
+      cod_ibge_siscan = str_extract(municipio_residencia, "^\\d{6}"),
+      nome_municipio = str_remove(municipio_residencia, "^\\d{6}\\s+"),
+      cod_ibge_siscan = as.character(cod_ibge_siscan)
+    ) %>%
+    select(cod_ibge_siscan, nome_municipio, starts_with("Categoria"))
+  
+  # Loop sobre categorias 0 a 6
+  comparacoes <- list()
+  for (cat in 0:6) {
+    col_siscan <- paste0("Categoria ", cat)
+    col_projeto <- paste0("Categoria_", cat, "_", ano, "_mun")
+    
+    comp <- inner_join(
+      base_siscan %>% select(cod_ibge_siscan, nome_municipio, !!sym(col_siscan)),
+      base_mama_resultados %>% select(cod_ibge_base, Municipio_mun, !!sym(col_projeto)),
+      by = c("cod_ibge_siscan" = "cod_ibge_base")
+    ) %>%
+      mutate(
+        valor_siscan = .data[[col_siscan]],
+        valor_projeto = .data[[col_projeto]],
+        iguais = valor_siscan == valor_projeto,
+        diferenca = valor_siscan - valor_projeto,
+        categoria = cat
+      ) %>%
+      select(
+        cod_ibge = cod_ibge_siscan,
+        Municipio_siscan = nome_municipio,
+        Municipio_base = Municipio_mun,
+        categoria,
+        valor_siscan,
+        valor_projeto,
+        iguais,
+        diferenca
+      )
+    
+    comparacoes[[as.character(cat)]] <- comp
+  }
+  
+  # Junta as comparações por categoria em um único dataframe
+  bind_rows(comparacoes)
+}
+
+# 4. Rodar comparação para todos os anos (2019–2024)
+comparacoes_categorias_mamografia <- list()
+
+for (ano in 2019:2024) {
+  comparacoes_categorias_mamografia[[as.character(ano)]] <- 
+    comparar_categorias_mamografia(ano, base_mama_resultados)
+}
+
+# 5. Conferir visualmente
+DT::datatable(comparacoes_categorias_mamografia[["2019"]])
+DT::datatable(comparacoes_categorias_mamografia[["2020"]])
+DT::datatable(comparacoes_categorias_mamografia[["2021"]])
+DT::datatable(comparacoes_categorias_mamografia[["2022"]])
+DT::datatable(comparacoes_categorias_mamografia[["2023"]])
+DT::datatable(comparacoes_categorias_mamografia[["2024"]])
+```
+
+
+### Verificação da base Colo
+#### Colo - População feminina e população elegível
+
+```{r, warning = FALSE, message = FALSE}
+######## COLO ###########
+
+# 1. Pacotes
+library(readxl)
+library(dplyr)
+library(stringr)
+
+# 2. Carregar base com as variáveis da aba COLO
+base_colo_pop <- read_excel("dados_municipios.xlsx", sheet = "COLO") %>%
+  select(
+    Municipio_mun,
+    COD_municipio_mun,
+    starts_with("POP_Feminina_"),
+    starts_with("Populacao_elegivel_colo_")
+  ) %>%
+  mutate(cod_ibge_base = substr(as.character(COD_municipio_mun), 1, 6))
+
+# 3. Função de comparação
+comparar_pop_feminina_colo <- function(ano, base_colo_pop) {
+  
+  col_total_projeto <- paste0("POP_Feminina_", ano, "_mun")
+  col_elegivel_projeto <- paste0("Populacao_elegivel_colo_", ano, "_mun")
+  arquivo <- paste0("DATASUS_Populacao_Feminina_", ano, ".xlsx")
+  
+  base_datasus <- read_excel(arquivo) %>%
+    rename(municipio_raw = `Município`) %>%
+    mutate(
+      cod_ibge_datasus = str_extract(municipio_raw, "^\\d{6}"),
+      nome_municipio = str_remove(municipio_raw, "^\\d{6}\\s+"),
+      cod_ibge_datasus = as.character(cod_ibge_datasus),
+      elegivel_colo = rowSums(select(., `24 anos`:`64 anos`), na.rm = TRUE)
+    ) %>%
+    select(cod_ibge_datasus, nome_municipio, Total, elegivel_colo)
+  
+  comparacao <- inner_join(
+    base_datasus,
+    base_colo_pop,
+    by = c("cod_ibge_datasus" = "cod_ibge_base")
+  ) %>%
+    mutate(
+      valor_projeto_total = .data[[col_total_projeto]],
+      valor_projeto_elegivel = .data[[col_elegivel_projeto]],
+      iguais_total = Total == valor_projeto_total,
+      iguais_elegivel = elegivel_colo == valor_projeto_elegivel,
+      diferenca_total = Total - valor_projeto_total,
+      diferenca_elegivel = elegivel_colo - valor_projeto_elegivel
+    ) %>%
+    select(
+      cod_ibge = cod_ibge_datasus,
+      Municipio_datasus = nome_municipio,
+      Municipio_base = Municipio_mun,
+      Total_datasus = Total,
+      valor_projeto_total,
+      iguais_total,
+      diferenca_total,
+      elegivel_datasus = elegivel_colo,
+      valor_projeto_elegivel,
+      iguais_elegivel,
+      diferenca_elegivel
+    )
+  
+  return(comparacao)
+}
+
+# 4. Rodar comparação para todos os anos (2019–2024)
+comparacoes_pop_feminina_colo <- list()
+
+for (ano in 2019:2024) {
+  comparacoes_pop_feminina_colo[[as.character(ano)]] <- comparar_pop_feminina_colo(ano, base_colo_pop)
+}
+
+
+# 5. Conferência visual
+DT::datatable(comparacoes_pop_feminina_colo[["2019"]])
+DT::datatable(comparacoes_pop_feminina_colo[["2020"]])
+DT::datatable(comparacoes_pop_feminina_colo[["2021"]])
+DT::datatable(comparacoes_pop_feminina_colo[["2022"]])
+DT::datatable(comparacoes_pop_feminina_colo[["2023"]])
+DT::datatable(comparacoes_pop_feminina_colo[["2024"]])
+
+```
+
+
+
+
+#### Colo - Citopatologicos
+
+```{r, warning = FALSE, message = FALSE}
+############# Municípios ####################
+
+# 1. Pacotes
+library(readxl)
+library(dplyr)
+library(stringr)
+
+# 2. Carregar base do projeto (aba COLO)
+base_colo <- read_excel("dados_municipios.xlsx", sheet = "COLO") %>%
+  select(Municipio_mun, COD_municipio_mun, starts_with("Cito_Colo_")) %>%
+  mutate(cod_ibge_base = substr(as.character(COD_municipio_mun), 1, 6))
+
+# 3. Função para comparar exames citopatológicos de colo do útero
+comparar_citopatologico_colo <- function(ano, base_colo) {
+  
+  col_projeto <- paste0("Cito_Colo_", ano, "_mun")
+  arquivo <- paste0("SISCAN_Citopatológico_Colo_", ano, ".xlsx")
+  
+  base_siscan <- read_excel(arquivo) %>%
+    rename(municipio_residencia = `Munic.de residencia`) %>%
+    mutate(
+      cod_ibge_siscan = str_extract(municipio_residencia, "^\\d{6}"),
+      nome_municipio = str_remove(municipio_residencia, "^\\d{6}\\s+"),
+      cod_ibge_siscan = as.character(cod_ibge_siscan),
+      Total = as.numeric(Exames)
+    ) %>%
+    select(cod_ibge_siscan, nome_municipio, Total)
+  
+  comparacao <- inner_join(
+    base_siscan,
+    base_colo,
+    by = c("cod_ibge_siscan" = "cod_ibge_base")
+  ) %>%
+    mutate(
+      valor_projeto = .data[[col_projeto]],
+      iguais = Total == valor_projeto,
+      diferenca = Total - valor_projeto
+    ) %>%
+    select(
+      cod_ibge = cod_ibge_siscan,
+      Municipio_siscan = nome_municipio,
+      Municipio_base = Municipio_mun,
+      Total_siscan = Total,
+      valor_projeto,
+      iguais,
+      diferenca
+    )
+  
+  return(comparacao)
+}
+
+# 4. Rodar comparação para todos os anos (2019–2024)
+comparacoes_cito_colo <- list()
+
+for (ano in 2019:2024) {
+  comparacoes_cito_colo[[as.character(ano)]] <- comparar_citopatologico_colo(ano, base_colo)
+}
+
+# 5. Conferir visualmente
+DT::datatable(comparacoes_cito_colo[["2019"]])
+DT::datatable(comparacoes_cito_colo[["2020"]])
+DT::datatable(comparacoes_cito_colo[["2021"]])
+DT::datatable(comparacoes_cito_colo[["2022"]])
+DT::datatable(comparacoes_cito_colo[["2023"]])
+DT::datatable(comparacoes_cito_colo[["2024"]])
+```
+
+#### Colo - Citopatologicos inconclusivo
+
+```{r, warning = FALSE, message = FALSE}
+############# Municipios – CITO INCONCLUSIVOS ####################
+
+# 1. Pacotes
+library(readxl)
+library(dplyr)
+library(stringr)
+
+# 2. Carregar base de dados (aba COLO)
+base_colo_inconclusivo <- read_excel("dados_municipios.xlsx", sheet = "COLO") %>%
+  select(Municipio_mun, COD_municipio_mun, starts_with("Cito_Colo_inconclusvos_")) %>%
+  mutate(cod_ibge_base = substr(as.character(COD_municipio_mun), 1, 6))
+
+# 3. Função para comparar exames inconclusivos
+comparar_cito_inconclusivo <- function(ano, base_colo) {
+  
+  col_projeto <- paste0("Cito_Colo_inconclusvos_", ano, "_mun")
+  arquivo <- paste0("SISCAN_Citopatológico_Inconclusivo_", ano, ".xlsx")
+  
+  base_siscan <- read_excel(arquivo) %>%
+    rename(municipio_residencia = `Munic.de residencia`) %>%
+    mutate(
+      cod_ibge_siscan = str_extract(municipio_residencia, "^\\d{6}"),
+      nome_municipio = str_remove(municipio_residencia, "^\\d{6}\\s+"),
+      cod_ibge_siscan = as.character(cod_ibge_siscan),
+      Total = as.numeric(Total)
+    ) %>%
+    select(cod_ibge_siscan, nome_municipio, Total)
+  
+  comparacao <- inner_join(
+    base_siscan,
+    base_colo,
+    by = c("cod_ibge_siscan" = "cod_ibge_base")
+  ) %>%
+    mutate(
+      valor_projeto = .data[[col_projeto]],
+      iguais = Total == valor_projeto,
+      diferenca = Total - valor_projeto
+    ) %>%
+    select(
+      cod_ibge = cod_ibge_siscan,
+      Municipio_siscan = nome_municipio,
+      Municipio_base = Municipio_mun,
+      Total_siscan = Total,
+      valor_projeto,
+      iguais,
+      diferenca
+    )
+  
+  return(comparacao)
+}
+
+# 4. Rodar comparação para todos os anos (2019–2024)
+comparacoes_cito_inconclusivo <- list()
+
+for (ano in 2019:2024) {
+  comparacoes_cito_inconclusivo[[as.character(ano)]] <- comparar_cito_inconclusivo(ano, base_colo_inconclusivo)
+}
+
+# 5. Conferência visual
+DT::datatable(comparacoes_cito_inconclusivo[["2019"]])
+DT::datatable(comparacoes_cito_inconclusivo[["2020"]])
+DT::datatable(comparacoes_cito_inconclusivo[["2021"]])
+DT::datatable(comparacoes_cito_inconclusivo[["2022"]])
+DT::datatable(comparacoes_cito_inconclusivo[["2023"]])
+DT::datatable(comparacoes_cito_inconclusivo[["2024"]])
+```
+
+#### Colo - Citopatologicos alterado 
+
+```{r, warning = FALSE, message = FALSE}
+############# Municipios – CITO ALTERADOS ####################
+# 1. Pacotes
+library(readxl)
+library(dplyr)
+library(stringr)
+
+# 2. Carregar base de dados do projeto (aba COLO)
+base_colo_alterado <- read_excel("dados_municipios.xlsx", sheet = "COLO") %>%
+  select(Municipio_mun, COD_municipio_mun, starts_with("Cito_Alterados_")) %>%
+  mutate(cod_ibge_base = substr(as.character(COD_municipio_mun), 1, 6))
+
+# 3. Função para comparar exames citopatológicos alterados
+comparar_cito_alterado <- function(ano, base_colo) {
+  
+  col_projeto <- paste0("Cito_Alterados_", ano, "_mun")
+  arquivo <- paste0("SISCAN_Citopatológico_Alterado_", ano, ".xlsx")
+  
+  base_siscan <- read_excel(arquivo) %>%
+    rename(municipio_residencia = `Munic.de residencia`) %>%
+    mutate(
+      cod_ibge_siscan = str_extract(municipio_residencia, "^\\d{6}"),
+      nome_municipio = str_remove(municipio_residencia, "^\\d{6}\\s+"),
+      cod_ibge_siscan = as.character(cod_ibge_siscan),
+      Total = as.numeric(Pacientes)
+    ) %>%
+    select(cod_ibge_siscan, nome_municipio, Total)
+  
+  comparacao <- inner_join(
+    base_siscan,
+    base_colo,
+    by = c("cod_ibge_siscan" = "cod_ibge_base")
+  ) %>%
+    mutate(
+      valor_projeto = .data[[col_projeto]],
+      iguais = Total == valor_projeto,
+      diferenca = Total - valor_projeto
+    ) %>%
+    select(
+      cod_ibge = cod_ibge_siscan,
+      Municipio_siscan = nome_municipio,
+      Municipio_base = Municipio_mun,
+      Total_siscan = Total,
+      valor_projeto,
+      iguais,
+      diferenca
+    )
+  
+  return(comparacao)
+}
+
+# 4. Rodar comparação para todos os anos (2019–2024)
+comparacoes_cito_alterado <- list()
+
+for (ano in 2019:2024) {
+  comparacoes_cito_alterado[[as.character(ano)]] <- comparar_cito_alterado(ano, base_colo_alterado)
+}
+
+# 5. Conferir visualmente (exemplo)
+DT::datatable(comparacoes_cito_alterado[["2019"]])
+DT::datatable(comparacoes_cito_alterado[["2020"]])
+DT::datatable(comparacoes_cito_alterado[["2021"]])
+DT::datatable(comparacoes_cito_alterado[["2022"]])
+DT::datatable(comparacoes_cito_alterado[["2023"]])
+DT::datatable(comparacoes_cito_alterado[["2024"]])
+```
+
+#### Colo - Histopatologico municipal
+
+```{r, warning = FALSE, message = FALSE}
+############ COLO ###############
+
+# 1. Pacotes
+library(readxl)
+library(dplyr)
+library(stringr)
+
+# 2. Carregar base com os dados da aba COLO
+base_colo_histo <- read_excel("dados_municipios.xlsx", sheet = "COLO") %>%
+  select(Municipio_mun, COD_municipio_mun, starts_with("Histo_Colo_")) %>%
+  mutate(cod_ibge_base = substr(as.character(COD_municipio_mun), 1, 6))
+
+# 3. Função de comparação
+comparar_histopatologico_colo <- function(ano, base_colo) {
+  
+  col_projeto <- paste0("Histo_Colo_", ano, "_mun")
+  arquivo <- paste0("SISCAN_Histopatologico_Colo_", ano, ".xlsx")
+  
+  base_siscan <- read_excel(arquivo) %>%
+    rename(municipio_residencia = `Munic.de residencia`) %>%
+    mutate(
+      cod_ibge_siscan = str_extract(municipio_residencia, "^\\d{6}"),
+      nome_municipio = str_remove(municipio_residencia, "^\\d{6}\\s+"),
+      cod_ibge_siscan = as.character(cod_ibge_siscan),
+      Pacientes = as.numeric(Pacientes)
+    ) %>%
+    select(cod_ibge_siscan, nome_municipio, Pacientes)
+  
+  comparacao <- inner_join(
+    base_siscan,
+    base_colo,
+    by = c("cod_ibge_siscan" = "cod_ibge_base")
+  ) %>%
+    mutate(
+      valor_projeto = .data[[col_projeto]],
+      iguais = Pacientes == valor_projeto,
+      diferenca = Pacientes - valor_projeto
+    ) %>%
+    select(
+      cod_ibge = cod_ibge_siscan,
+      Municipio_siscan = nome_municipio,
+      Municipio_base = Municipio_mun,
+      Pacientes_siscan = Pacientes,
+      valor_projeto,
+      iguais,
+      diferenca
+    )
+  
+  return(comparacao)
+}
+
+# 4. Rodar comparação para os anos de 2019 a 2024
+comparacoes_histo_colo <- list()
+
+for (ano in 2019:2024) {
+  comparacoes_histo_colo[[as.character(ano)]] <- comparar_histopatologico_colo(ano, base_colo_histo)
+}
+
+# 5. Conferir visualmente
+DT::datatable(comparacoes_histo_colo[["2019"]])
+DT::datatable(comparacoes_histo_colo[["2020"]])
+DT::datatable(comparacoes_histo_colo[["2021"]])
+DT::datatable(comparacoes_histo_colo[["2022"]])
+DT::datatable(comparacoes_histo_colo[["2023"]])
+DT::datatable(comparacoes_histo_colo[["2024"]])
+
+
+```
+
+#### Colo - Histopatologico alterado 
+
+```{r, warning = FALSE, message = FALSE}
+######## COLO ###########
+
+# 1. Pacotes
+library(readxl)
+library(dplyr)
+library(stringr)
+
+# 2. Carregar base com os dados da aba COLO
+base_colo_alterados <- read_excel("dados_municipios.xlsx", sheet = "COLO") %>%
+  select(Municipio_mun, COD_municipio_mun, starts_with("Histo_Alterado_Colo_")) %>%
+  mutate(cod_ibge_base = substr(as.character(COD_municipio_mun), 1, 6))
+
+# 3. Função para comparar histopatológicos alterados do colo
+comparar_histo_alterado_colo <- function(ano, base_colo) {
+  
+  col_projeto <- paste0("Histo_Alterado_Colo_", ano, "_mun")
+  arquivo <- paste0("SISCAN_Histopatologico_Alterados_Colo_", ano, ".xlsx")
+  
+  base_siscan <- read_excel(arquivo) %>%
+    rename(municipio_residencia = `Munic.de residencia`) %>%
+    mutate(
+      cod_ibge_siscan = str_extract(municipio_residencia, "^\\d{6}"),
+      nome_municipio = str_remove(municipio_residencia, "^\\d{6}\\s+"),
+      cod_ibge_siscan = as.character(cod_ibge_siscan),
+      Total = as.numeric(Pacientes)
+    ) %>%
+    select(cod_ibge_siscan, nome_municipio, Total)
+  
+  comparacao <- inner_join(
+    base_siscan,
+    base_colo,
+    by = c("cod_ibge_siscan" = "cod_ibge_base")
+  ) %>%
+    mutate(
+      valor_projeto = .data[[col_projeto]],
+      iguais = Total == valor_projeto,
+      diferenca = Total - valor_projeto
+    ) %>%
+    select(
+      cod_ibge = cod_ibge_siscan,
+      Municipio_siscan = nome_municipio,
+      Municipio_base = Municipio_mun,
+      Total_siscan = Total,
+      valor_projeto,
+      iguais,
+      diferenca
+    )
+  
+  return(comparacao)
+}
+
+# 4. Rodar comparação para todos os anos (2019–2024)
+comparacoes_histo_alterado_colo <- list()
+
+for (ano in 2019:2024) {
+  comparacoes_histo_alterado_colo[[as.character(ano)]] <- comparar_histo_alterado_colo(ano, base_colo_alterados)
+}
+
+# 5. Conferir visualmente
+DT::datatable(comparacoes_histo_alterado_colo[["2019"]])
+DT::datatable(comparacoes_histo_alterado_colo[["2020"]])
+DT::datatable(comparacoes_histo_alterado_colo[["2021"]])
+DT::datatable(comparacoes_histo_alterado_colo[["2022"]])
+DT::datatable(comparacoes_histo_alterado_colo[["2023"]])
+DT::datatable(comparacoes_histo_alterado_colo[["2024"]])
+
+```
+
+#### Colo - Cancer
+
+```{r, warning = FALSE, message = FALSE}
+######## COLO ###########
+
+# 1. Pacotes
+library(readxl)
+library(dplyr)
+library(stringr)
+
+# 2. Carregar base com dados de câncer de colo
+base_colo_cancer <- read_excel("dados_municipios.xlsx", sheet = "COLO") %>%
+  select(Municipio_mun, COD_municipio_mun, starts_with("Cancer_Colo")) %>%
+  mutate(cod_ibge_base = substr(as.character(COD_municipio_mun), 1, 6))
+
+# 3. Função para comparar diagnósticos de câncer de colo
+comparar_cancer_colo <- function(ano, base_colo_cancer) {
+  
+  col_projeto <- paste0("Cancer_Colo_", ano, "_mun")
+  arquivo <- paste0("SISCAN_Cancer_Colo_", ano, ".xlsx")
+  
+  base_siscan <- read_excel(arquivo) %>%
+    rename(municipio_residencia = `Munic.de residencia`) %>%
+    mutate(
+      cod_ibge_siscan = str_extract(municipio_residencia, "^\\d{6}"),
+      nome_municipio = str_remove(municipio_residencia, "^\\d{6}\\s+"),
+      cod_ibge_siscan = as.character(cod_ibge_siscan),
+      Pacientes = as.numeric(Pacientes)
+    ) %>%
+    select(cod_ibge_siscan, nome_municipio, Pacientes)
+  
+  comparacao <- inner_join(
+    base_siscan,
+    base_colo_cancer,
+    by = c("cod_ibge_siscan" = "cod_ibge_base")
+  ) %>%
+    mutate(
+      valor_projeto = .data[[col_projeto]],
+      iguais = Pacientes == valor_projeto,
+      diferenca = Pacientes - valor_projeto
+    ) %>%
+    select(
+      cod_ibge = cod_ibge_siscan,
+      Municipio_siscan = nome_municipio,
+      Municipio_base = Municipio_mun,
+      Pacientes_siscan = Pacientes,
+      valor_projeto,
+      iguais,
+      diferenca
+    )
+  
+  return(comparacao)
+}
+
+# 4. Rodar comparação para todos os anos (2019–2024)
+comparacoes_cancer_colo <- list()
+
+for (ano in 2019:2024) {
+  comparacoes_cancer_colo[[as.character(ano)]] <- comparar_cancer_colo(ano, base_colo_cancer)
+}
+
+# 5. Conferência visual 
+DT::datatable(comparacoes_cancer_colo[["2019"]])
+DT::datatable(comparacoes_cancer_colo[["2020"]])
+DT::datatable(comparacoes_cancer_colo[["2021"]])
+DT::datatable(comparacoes_cancer_colo[["2022"]])
+DT::datatable(comparacoes_cancer_colo[["2023"]])
+DT::datatable(comparacoes_cancer_colo[["2024"]])
+
+```
+
+#### Colo - Tratamento
+```{r, warning = FALSE, message = FALSE}
+############ Tratamento Municipios ###########
+# 1. Pacotes
+library(readxl)
+library(dplyr)
+library(stringi)
+library(stringr)
+
+# 2. Carregar base municipal sem duplicar o código
+base_mun_mama <- read_excel("dados_municipios.xlsx", sheet = "MAMA") %>%
+  select(Municipio_mun, COD_municipio_mun, starts_with("tratamento_mama"))
+
+base_mun_colo <- read_excel("dados_municipios.xlsx", sheet = "COLO") %>%
+  select(Municipio_mun, starts_with("tratamento_colo"))
+
+# Junta as duas mantendo apenas uma coluna de COD_municipio_mun
+base_mun <- full_join(base_mun_mama, base_mun_colo, by = "Municipio_mun")
+
+
+# 3. Função para comparação usando COD IBGE
+comparar_tratamentos <- function(ano, tipo, base_mun, arquivo_inca) {
+  
+  # Nome da coluna correspondente ao ano na base municipal
+  col_mun <- paste0("tratamento_", tipo, "_", ano, "_mun")
+  
+  # Base municipal com código IBGE como string
+  base_projeto <- base_mun %>%
+    select(Municipio_mun, COD_municipio_mun, !!sym(col_mun)) %>%
+    mutate(
+      cod_ibge_base = as.character(COD_municipio_mun)
+    )
+  
+  # Lê o arquivo do INCA e extrai o código IBGE (7 dígitos)
+  base_inca <- read_excel(arquivo_inca) %>%
+    mutate(
+      Total = as.numeric(Total),
+      cod_ibge_inca = str_extract(Municipio, "\\d{7}")  # só o código
+    ) %>%
+    select(cod_ibge_inca, Municipio, Total)
+  
+  # Faz join pelo código IBGE
+  comparacao <- inner_join(
+    base_inca,
+    base_projeto,
+    by = c("cod_ibge_inca" = "cod_ibge_base")
+  ) %>%
+    mutate(
+      valor_projeto = .data[[col_mun]],
+      iguais = Total == valor_projeto,
+      diferenca = Total - valor_projeto
+    ) %>%
+    select(
+      cod_ibge = cod_ibge_inca,
+      Municipio_inca = Municipio,
+      Municipio_base = Municipio_mun,
+      Total_inca = Total,
+      valor_projeto,
+      iguais,
+      diferenca
+    )
+  
+  return(comparacao)
+}
+
+
+# 4. Lista dos arquivos XLSX do INCA (já limpos)
+arquivos_inca <- list(
+  mama_2019 = "INCA_Tratamento_Mama_2019.xlsx",
+  mama_2020 = "INCA_Tratamento_Mama_2020.xlsx",
+  mama_2021 = "INCA_Tratamento_Mama_2021.xlsx",
+  mama_2022 = "INCA_Tratamento_Mama_2022.xlsx",
+  mama_2023 = "INCA_Tratamento_Mama_2023.xlsx",
+  colo_2019 = "INCA_Tratamento_Colo_2019.xlsx",
+  colo_2020 = "INCA_Tratamento_Colo_2020.xlsx",
+  colo_2021 = "INCA_Tratamento_Colo_2021.xlsx",
+  colo_2022 = "INCA_Tratamento_Colo_2022.xlsx",
+  colo_2023 = "INCA_Tratamento_Colo_2023.xlsx"
+)
+
+
+# 5. Gerar comparações para todos os anos/tipos
+comparacoes <- list()
+
+for (tipo in c("mama", "colo")) {
+  for (ano in 2019:2023) {
+    key <- paste0(tipo, "_", ano)
+    arquivo_inca <- arquivos_inca[[key]]
+    
+    comparacoes[[key]] <- comparar_tratamentos(
+      ano = ano,
+      tipo = tipo,
+      base_mun = base_mun,
+      arquivo_inca = arquivo_inca
+    )
+  }
+}
+
+
+# 6. Abrir e conferir
+DT::datatable(comparacoes[["colo_2019"]])  # compara colo 2019
+DT::datatable(comparacoes[["colo_2020"]])  # compara colo 2020
+DT::datatable(comparacoes[["colo_2021"]])  # compara colo 2021
+DT::datatable(comparacoes[["colo_2022"]])  # compara colo 2022
+DT::datatable(comparacoes[["colo_2023"]])  # compara colo 2023
+```
+
+
+
+

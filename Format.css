@@ -1,0 +1,16 @@
+/* Format.css */
+
+/* Define o tamanho da fonte e o alinhamento do texto principal */
+body {
+  font-size: 16px;
+  line-height: 1.6;
+  text-align: justify; /* Esta linha justifica o texto de todo o documento */
+}
+
+/* Define o tamanho da fonte para os títulos */
+h1, h2, h3, h4, h5, h6 {
+  font-size: 18px;
+  font-weight: bold;
+  color: #2c3e50;
+  text-align: left; /* Geralmente, títulos ficam melhor alinhados à esquerda */
+}
