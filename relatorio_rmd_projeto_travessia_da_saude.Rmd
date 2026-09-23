@@ -1023,3 +1023,4 @@ executar_pipeline_sanitário <- function(dados_brutos) {
 }
 ```
 
+![Mapa de Calor para o Índice Sintético de Prioridade Sanitária para Colo do Útero](heatmap_perfil_risco_corrigido.png)
