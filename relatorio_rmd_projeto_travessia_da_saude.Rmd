@@ -972,6 +972,8 @@ Essa solução teve como objetivo integrar e comparar os quatro indicadores crí
 
 (i) Padronização dos Indicadores por meio do Escore-ZPara eliminar o viés de escala entre variáveis expressas em unidades heterogêneas (taxas de mortalidade vs. percentuais de cobertura), aplicou-se a transformação por Escore-Z. A função scale() do R padroniza os valores brutos ($x_i$), centralizando a média na origem ($\mu = 0$) com variância unitária ($\sigma = 1$):$$z_i = \frac{x_i - \bar{x}}{s}$$Ajuste Direcional de Risco: Para garantir a coesão interpretativa (onde valores positivos de $Z$ representam sempre maior risco sanitário), o indicador de cobertura foi invertido multiplicando-se por $-1$:$$\text{Z\_Cobertura} = \text{scale}(\text{cobertura\_media}) \times (-1)$$(ii) Construção do Índice Sintético de Prioridade Sanitária (ISPS)O ISPS agrega as 4 dimensões epidemiológicas e assistenciais em um único indicador ordinal para ranquear os municípios. O cálculo é realizado pela soma vetorial dos 4 Escores-Z padronizados:$$\text{ISPS}_i = Z_{\text{Mortalidade}_i} + Z_{\text{Cobertura Invertida}_i} + Z_{\text{Insatisfatórios}_i} + Z_{\text{Positividade}_i}$$A ordenação é computada via função min_rank(desc(ISPS)), atribuindo a posição $1^{\text{o}}$ ao município de maior escore sintético de risco.(iii) Análise de Correlação MúltiplaA avaliação do grau de associação linear e multicolinearidade entre as quatro variáveis é executada via pacote GGally (função ggpairs()), computando o Coeficiente de Correlação de Pearson ($r$):$$r = \frac{\sum (x_i - \bar{x})(y_i - \bar{y})}{\sqrt{\sum (x_i - \bar{x})^2 \sum (y_i - \bar{y})^2}}$$(iv) Visualização Integrada via Mapa de Calor (Heatmap)A visualização matricial bidimensional utiliza o ggplot2:Reorganização dos dados para formato longo via pivot_longer().Mapeamento de cores continuas pelo Escore-Z através da função geom_tile().Impressão de rótulos numéricos com geom_text(), aplicando contraste dinâmico de cor:$$\text{Cor do Texto} = \begin{cases} \text{Preto ("black")}, & \text{se } \text{Escore-Z} > 1.2 \\ \text{Branco ("white")}, & \text{caso contrário} \end{cases}$$
 
+Os indicadores analisados foram: Mortalidade por Câncer de Colo do Útero (suavizada por método Bayesiano Empírico Global), Cobertura de Exames Citopatológicos (parâmetro: ≥80%), Proporção de Exames Insatisfatórios (parâmetro: <5%) e Índice de Positividade (parâmetro: ≥3%). É fundamental destacar que a direção do risco varia conforme o indicador: para a mortalidade, exames insatisfatórios e positividade, quanto maior o valor, pior o cenário; para a cobertura, quanto menor o valor, pior o cenário.
+
 ### Solução em R
 
 ```{r} 
@@ -1024,3 +1026,48 @@ executar_pipeline_sanitário <- function(dados_brutos) {
 ```
 
 ![Mapa de Calor para o Índice Sintético de Prioridade Sanitária para Colo do Útero](heatmap_perfil_risco_corrigido.png)
+
+## Análise dos Municípios de Maior Risco Global
+A ordenação do heatmap revela que os municípios no topo do ranking apresentam combinações de indicadores que sinalizam falhas estruturais no processo de rastreamento e assistência.
+
+Mocajuba (PA), ocupando a 1ª posição de maior risco global, exemplifica um cenário crítico de falha na qualidade da coleta. Apesar de apresentar boa cobertura (16,1 | 6º), o município lidera o ranking de exames insatisfatórios (35,2 | 1º), valor sete vezes superior ao parâmetro recomendado pelo Ministério da Saúde. Esse achado sugere que o problema não é o acesso, mas sim a inadequação das amostras, o que compromete a sensibilidade do rastreamento e pode estar contribuindo para a elevada mortalidade observada (1,5 | 11º).
+
+Chapadinha (MA), na 2ª posição, apresenta um perfil distinto. O município lidera o ranking de mortalidade (2,2 | 1º) e ocupa a 3ª posição em positividade (5,3 | 3º), indicando uma alta carga de doença na população e um desfecho fatal elevado. A cobertura é mediana (22,8 | 8º), o que sugere que, embora haja detecção, o diagnóstico pode estar ocorrendo em estágios avançados, ou o tratamento não está sendo efetivo.
+
+Darcinópolis (TO), na 3ª posição, configura o cenário mais alarmante do ponto de vista da ineficácia do rastreamento. O município combina baixa cobertura (12,6 | 4º), alta mortalidade (1,3 | 21º) e a maior positividade entre todos os analisados (6,6 | 1º). Esse padrão é clássico de diagnóstico tardio: poucas mulheres são examinadas e, quando o são, já apresentam lesões graves, resultando em desfechos fatais. A intervenção aqui deve priorizar a ampliação do acesso e a busca ativa.
+
+## Análise dos Municípios de Menor Risco Global
+Na base do ranking, os municípios Alambari (SP) (38º) e Boa Vista da Aparecida (PR) (37º) representam exemplos de sistemas de rastreamento eficazes. Alambari apresenta baixa mortalidade (1,2 | 30º), boa cobertura (81,8 | 36º), baixos exames insatisfatórios (0,5 | 36º) e baixa positividade (1,9 | 28º). Esse perfil indica que o município consegue aliar acesso, qualidade e detecção oportuna, resultando em desfechos favoráveis. Tais municípios podem servir como benchmarks para a implementação de boas práticas nos demais.
+
+## Padrões e Correlações Relevantes
+A análise integrada do heatmap revela três padrões epidemiológicos e assistenciais dignos de nota:
+
+a) O paradoxo da cobertura vs. mortalidade: Vários municípios no topo do ranking (Mocajuba, Chapadinha, Araguaína) apresentam boa cobertura de exames, mas mantêm alta mortalidade. Isso indica que o problema não é exclusivamente o acesso, mas sim a qualidade do rastreamento (exames insatisfatórios) ou a efetividade do tratamento após o diagnóstico. Esse achado reforça a necessidade de se avaliar a linha de cuidado como um todo, e não apenas a cobertura isoladamente.
+
+b) A centralidade da qualidade da coleta: A coluna de exames insatisfatórios emerge como um dos principais preditores de risco. Municípios como Mocajuba (35,2), Cacoal (58,5) e São Bernardo (64,3) apresentam escores extremamente elevados, sinalizando falhas graves na capacitação dos profissionais responsáveis pela coleta. Intervenções focadas em educação permanente e auditoria de lâminas são urgentes nesses locais.
+
+c) A relação entre positividade e mortalidade: Observa-se que municípios com alta positividade tendem a apresentar alta mortalidade (ex.: Chapadinha, Darcinópolis). Isso sugere que a alta prevalência de lesões não está sendo acompanhada de intervenções oportunas, resultando em progressão da doença. Por outro lado, municípios com baixa positividade e baixa mortalidade (Alambari, Boa Vista da Aparecida) indicam um rastreamento que detecta lesões em estágios iniciais e interrompe a progressão.
+
+d) Perfis mistos e riscos mascarados: Alguns municípios apresentam risco global intermediário, mas com indicadores de processo críticos. É o caso de Santa Maria da Boa Vista (PE) (13º), que tem baixa mortalidade (1 | 33º) e baixa positividade (2,7 | 21º), mas apresenta altíssimos exames insatisfatórios (4,3 | 8º) e baixa cobertura (8 | 19º). Esse perfil sugere um sistema que pode estar mascarando o problema real devido à baixa detecção, o que representa um risco latente de aumento futuro da mortalidade.
+
+### Tabela com o banco de dados para os fluxos de Câncer de Mama
+
+```{r  echo=FALSE, message=FALSE, warning=FALSE}
+# 1. Tente usar read.csv2 para ficheiros separados por ponto e vírgula
+dados <- read.csv2("dados_municipios_mama.csv", encoding = "UTF-8")
+
+# 2. Gerar a tabela dinâmica
+datatable(
+  dados,
+  filter = 'top',
+  options = list(
+    pageLength = 10,
+    scrollX = TRUE,
+    language = list(url = '//cdn.datatables.net/plug-ins/1.10.11/i18n/Portuguese-Brasil.json')
+  )
+)
+
+```
+
+Dada a distribuição imediata da tabela, especialmente a partir da relação direta entre o número total de exames e a forma como se pode comparar a realidade dos municípios, é importante destacar os índices de cobertura presentes nas notas técnicas produzidas pelo INCA. Nesse sentido, para comparar caso a caso, é necessário explorar o comportamento dos dados a partir da Ficha técnica das de indicadores das ações de controle do Câncer Mama
+
