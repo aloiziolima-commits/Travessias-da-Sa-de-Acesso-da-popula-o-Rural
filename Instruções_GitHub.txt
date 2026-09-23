@@ -1,0 +1,13 @@
+Instruções para resolução do GitHub
+
+# Passo 1: Limpa o cache de visualização do Git e verifica o estado atual
+git status
+
+# Passo 2: Adiciona manualmente todos os ficheiros alterados ao Git
+git add .
+
+# Passo 3: Cria o registo de salvamento das alterações com uma mensagem
+git commit -m "Recuperando sincronizacao e atualizando codigo"
+
+# Passo 4: Envia as alterações para o GitHub/GitLab remoto
+git push origin main

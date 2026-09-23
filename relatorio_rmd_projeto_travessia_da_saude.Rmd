@@ -967,3 +967,59 @@ Além disso, é possível apontar tendências contínuas de risco Poucos municí
 Em síntese, o panorama da mortalidade nos pequenos municípios reforça que, além de qualificar a rede de atendimento oncologia, é urgente padronizar a notificação epidemiológica local, garantindo que o registro explícito do "zero óbito" seja computado de forma distinta da ausência de informação.
 
 ### Índice Sintético de Prioridade Sanitária para Colo do Útero
+
+Essa solução teve como objetivo integrar e comparar os quatro indicadores críticos relacionados ao rastreamento do câncer de colo do útero em 38 municípios selecionados. Para tanto, foi desenvolvida uma solução analítica em ambiente R que compreendeu quatro etapas principais: (i) padronização dos indicadores por meio de Escore-Z, permitindo a comparação em uma mesma escala; (ii) construção de um Índice Sintético de Prioridade Sanitária (ISPS) para hierarquizar o risco global; (iii) análise de correlação múltipla entre os indicadores; e (iv) visualização integrada por meio de um mapa de calor (heatmap).
+
+(i) Padronização dos Indicadores por meio do Escore-ZPara eliminar o viés de escala entre variáveis expressas em unidades heterogêneas (taxas de mortalidade vs. percentuais de cobertura), aplicou-se a transformação por Escore-Z. A função scale() do R padroniza os valores brutos ($x_i$), centralizando a média na origem ($\mu = 0$) com variância unitária ($\sigma = 1$):$$z_i = \frac{x_i - \bar{x}}{s}$$Ajuste Direcional de Risco: Para garantir a coesão interpretativa (onde valores positivos de $Z$ representam sempre maior risco sanitário), o indicador de cobertura foi invertido multiplicando-se por $-1$:$$\text{Z\_Cobertura} = \text{scale}(\text{cobertura\_media}) \times (-1)$$(ii) Construção do Índice Sintético de Prioridade Sanitária (ISPS)O ISPS agrega as 4 dimensões epidemiológicas e assistenciais em um único indicador ordinal para ranquear os municípios. O cálculo é realizado pela soma vetorial dos 4 Escores-Z padronizados:$$\text{ISPS}_i = Z_{\text{Mortalidade}_i} + Z_{\text{Cobertura Invertida}_i} + Z_{\text{Insatisfatórios}_i} + Z_{\text{Positividade}_i}$$A ordenação é computada via função min_rank(desc(ISPS)), atribuindo a posição $1^{\text{o}}$ ao município de maior escore sintético de risco.(iii) Análise de Correlação MúltiplaA avaliação do grau de associação linear e multicolinearidade entre as quatro variáveis é executada via pacote GGally (função ggpairs()), computando o Coeficiente de Correlação de Pearson ($r$):$$r = \frac{\sum (x_i - \bar{x})(y_i - \bar{y})}{\sqrt{\sum (x_i - \bar{x})^2 \sum (y_i - \bar{y})^2}}$$(iv) Visualização Integrada via Mapa de Calor (Heatmap)A visualização matricial bidimensional utiliza o ggplot2:Reorganização dos dados para formato longo via pivot_longer().Mapeamento de cores continuas pelo Escore-Z através da função geom_tile().Impressão de rótulos numéricos com geom_text(), aplicando contraste dinâmico de cor:$$\text{Cor do Texto} = \begin{cases} \text{Preto ("black")}, & \text{se } \text{Escore-Z} > 1.2 \\ \text{Branco ("white")}, & \text{caso contrário} \end{cases}$$
+
+### Solução em R
+
+```{r} 
+if (!require("pacman")) install.packages("pacman")
+pacman::p_load(tidyverse, GGally)
+
+# FUNÇÃO MODULAR PARA PROCESSAMENTO METODOLÓGICO
+executar_pipeline_sanitário <- function(dados_brutos) {
+  
+  # 1. CONSOLIDAÇÃO E BAYES EMPÍRICO
+  dados_proc <- dados_brutos %>%
+    rowwise() %>%
+    mutate(
+      municipio = Municipio_mun,
+      obitos_totais = sum(c_across(starts_with("obitos_")), na.rm = TRUE),
+      pop_media     = mean(c_across(starts_with("POP_Feminina_")), na.rm = TRUE),
+      cobertura     = mean(c_across(starts_with("cobertura_cito_")), na.rm = TRUE),
+      insatisfatorio = mean(c_across(starts_with("prop_tnsatisfatoria_")), na.rm = TRUE),
+      positividade  = mean(c_across(starts_with("indic_positiv_")), na.rm = TRUE)
+    ) %>%
+    ungroup()
+  
+  # Cálculo Bayesiano de Mortalidade
+  pop_5a <- dados_proc$pop_media * 5
+  taxa_bruta <- dados_proc$obitos_totais / pop_5a
+  taxa_glob  <- sum(dados_proc$obitos_totais, na.rm = TRUE) / sum(pop_5a, na.rm = TRUE)
+  var_b <- var(taxa_bruta, na.rm = TRUE)
+  var_e <- taxa_glob / mean(pop_5a, na.rm = TRUE)
+  var_a <- max(0, var_b - var_e)
+  w_i   <- var_a / (var_a + (taxa_glob / pop_5a))
+  
+  # 2. PADRONIZAÇÃO (ESCORE-Z) E ÍNDICE SINTÉTICO (ISPS)
+  dados_escore <- dados_proc %>%
+    mutate(
+      taxa_bayes = ((w_i * taxa_bruta) + ((1 - w_i) * taxa_glob)) / 5 * 100000,
+      
+      # (i) Escores-Z
+      z_mort = as.vector(scale(taxa_bayes)),
+      z_cob  = as.vector(scale(cobertura)) * -1, # Invertido para sentido de risco
+      z_ins  = as.vector(scale(insatisfatorio)),
+      z_pos  = as.vector(scale(positividade)),
+      
+      # (ii) ISPS - Índice Sintético de Prioridade Sanitária
+      isps   = z_mort + z_cob + z_ins + z_pos,
+      rk_global = min_rank(desc(isps))
+    )
+  
+  return(dados_escore)
+}
+```
+

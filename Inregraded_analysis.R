@@ -1,6 +1,4 @@
-# ==============================================================================
-# PROJETO TRAVESSIA DA SAÚDE: HEATMAP COM COR DINÂMICA E RÓTULOS LIMPOS
-# ==============================================================================
+#### Índice Sintético de Prioridade Sanitária ####
 
 # 1. INSTALAÇÃO E CARREGAMENTO DOS PACOTES
 # ------------------------------------------------------------------------------
