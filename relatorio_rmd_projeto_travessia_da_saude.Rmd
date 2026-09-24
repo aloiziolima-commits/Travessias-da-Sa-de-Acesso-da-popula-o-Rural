@@ -1071,3 +1071,66 @@ datatable(
 
 Dada a distribuição imediata da tabela, especialmente a partir da relação direta entre o número total de exames e a forma como se pode comparar a realidade dos municípios, é importante destacar os índices de cobertura presentes nas notas técnicas produzidas pelo INCA. Nesse sentido, para comparar caso a caso, é necessário explorar o comportamento dos dados a partir da Ficha técnica das de indicadores das ações de controle do Câncer Mama
 
+### Cobertura da mamografia de rastreamento na população alvo
+
+Percentual de mulheres na faixa etária de 50 a 69 anos que realizaram mamografia de rastreamento, em determinado local e período, nos últimos dois anos, em relação à população-alvo. Contribui na avaliação do alcance da população alvo (mulheres de 50 a 69 anos) no rastreamento do câncer de mama. A referência, para a OMS, é 70% da população-alvo.
+
+```{r graficos-medios-mama, echo=FALSE, message=FALSE, warning=FALSE, fig.width=12, fig.height=12}
+library(ggplot2)
+library(tidyr)
+library(dplyr)
+
+# 1. Carregamento do banco de dados de Mama
+dados_mama <- read.csv2("dados_municipios_mama.csv", stringsAsFactors = FALSE)
+
+# 2. Definição das Ordens e Preparação (Base comum)
+ordem_medios <- c(
+  "Tabatinga - AM", "Cametá - PA", "Araguaína - TO", "Chapadinha - MA",
+  "Iguatu - CE", "Mossoró - RN", "Serra Talhada - PE", "Petrolina - PE",
+  "Juazeiro - BA", "Teixeira de Freitas - BA", "Dourados - MS",
+  "Rondonópolis - MT", "Formosa - GO", "Muriaé - MG", "Rio das Ostras - RJ",
+  "Sorocaba - SP", "Cascavel - PR", "Araranguá - SC", "Erechim - RS"
+)
+
+ordem_pequenos <- c(
+  "Benjamin Constant - AM", "Mocajuba - PA", "Darcinópolis - TO", "São Bernardo - MA",
+  "Catarina - CE", "Apodi - RN", "Mirandiba - PE", "Santa Maria da Boa Vista - PE",
+  "Casa Nova - BA", "Caravelas - BA", "Rio Brilhante - MS", "Juscimeira - MT",
+  "Vila Boa - GO", "São Francisco do Glória - MG", "Silva Jardim - RJ",
+  "Alambari - SP", "Boa Vista da Aparecida - PR", "Praia Grande - SC", "Nonoai - RS"
+)
+
+# 3. Preparar os dados para ambos os gráficos (Câncer de Mama)
+dados_preparados <- dados_mama %>%
+  mutate(Porte = ifelse(Municipio_mun %in% ordem_medios, "Municípios Médios", "Municípios Pequenos")) %>%
+  mutate(Municipio_mun = factor(Municipio_mun, levels = c(ordem_medios, ordem_pequenos))) %>%
+  pivot_longer(
+    cols = starts_with("cobertura_"),
+    names_to = "Ano",
+    values_to = "Cobertura"
+  ) %>%
+  mutate(Ano = as.numeric(gsub("cobertura_", "", Ano)))
+
+# 4. Gerar Gráfico: MUNICÍPIOS MÉDIOS
+grafico_medios <- dados_preparados %>%
+  filter(Porte == "Municípios Médios") %>%
+  ggplot(aes(x = Ano, y = Cobertura, group = Municipio_mun)) +
+  geom_line(color = "#452552", size = 1) +
+  geom_point(color = "#452552") +
+  geom_text(aes(label = paste0(round(Cobertura, 1), "%")), 
+            vjust = -1.5, size = 3, color = "#452552") +
+  facet_wrap(~Municipio_mun, ncol = 4) +
+  scale_y_continuous(expand = expansion(mult = c(0.1, 0.4))) + 
+  theme_minimal() +
+  labs(title = "Cobertura de Mamografia: Municípios Médios", 
+       subtitle = "Série Histórica 2019-2024",
+       x = "Ano", y = "Cobertura (%)")
+
+# Exibir os gráficos no RStudio
+print(grafico_medios)
+
+
+```
+
+### Resultados e discussão para o Municípios Médios
+
