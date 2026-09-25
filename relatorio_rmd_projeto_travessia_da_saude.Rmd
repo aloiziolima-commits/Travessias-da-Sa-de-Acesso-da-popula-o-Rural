@@ -1153,3 +1153,25 @@ A análise conjunta desses padrões permite concluir que, em geral, a cobertura 
 Do ponto de vista da gestão, a série histórica revela que o problema não é apenas de cobertura, mas também de estabilidade e confiabilidade dos dados. As quedas abruptas observadas em Araranguá e Formosa levantam suspeitas sobre a qualidade do registro, o que pode comprometer qualquer análise baseada nos sistemas de informação. Por outro lado, os municípios que conseguiram melhorar de forma consistente demonstram que intervenções bem planejadas podem produzir resultados positivos, servindo como referência para os demais.
 
 Em síntese, a série histórica da cobertura de mamografia evidencia um cenário de fragilidade generalizada, com poucos exemplos de sucesso e vários casos de estagnação ou retrocesso. A interpretação desses dados à luz das definições do INCA reforça a importância de se monitorar não apenas o valor anual, mas a tendência ao longo do tempo, identificando municípios que precisam de apoio urgente e aqueles que podem servir de modelo. A análise temporal é, portanto, um instrumento essencial para o planejamento de ações que visem ampliar o acesso ao rastreamento e reduzir a mortalidade por câncer de mama.
+
+```{r graficos-pequenos-mama, echo=FALSE, message=FALSE, warning=FALSE, fig.width=12, fig.height=12}
+
+# 5. Gerar Gráfico: MUNICÍPIOS PEQUENOS
+grafico_pequenos <- dados_preparados %>%
+  filter(Porte == "Municípios Pequenos") %>%
+  ggplot(aes(x = Ano, y = Cobertura, group = Municipio_mun)) +
+  geom_line(color = "#452552", size = 1) +
+  geom_point(color = "#452552") +
+  geom_text(aes(label = paste0(round(Cobertura, 1), "%")), 
+            vjust = -1.5, size = 3, color = "#452552") +
+  facet_wrap(~Municipio_mun, ncol = 5) +
+  scale_y_continuous(expand = expansion(mult = c(0.1, 0.4))) + 
+  theme_minimal() +
+  labs(title = "Cobertura de Mamografia: Municípios Pequenos", 
+       subtitle = "Série Histórica 2019-2024",
+       x = "Ano", y = "Cobertura (%)")
+
+print(grafico_pequenos)
+
+```
+
