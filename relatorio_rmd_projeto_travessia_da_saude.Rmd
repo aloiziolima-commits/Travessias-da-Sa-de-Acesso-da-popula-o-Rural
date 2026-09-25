@@ -1160,10 +1160,10 @@ Em síntese, a série histórica da cobertura de mamografia evidencia um cenári
 grafico_pequenos <- dados_preparados %>%
   filter(Porte == "Municípios Pequenos") %>%
   ggplot(aes(x = Ano, y = Cobertura, group = Municipio_mun)) +
-  geom_line(color = "#452552", size = 1) +
-  geom_point(color = "#452552") +
+  geom_line(color = "#32381a", size = 1) +
+  geom_point(color = "#32381a") +
   geom_text(aes(label = paste0(round(Cobertura, 1), "%")), 
-            vjust = -1.5, size = 3, color = "#452552") +
+            vjust = -1.5, size = 3, color = "#32381a") +
   facet_wrap(~Municipio_mun, ncol = 5) +
   scale_y_continuous(expand = expansion(mult = c(0.1, 0.4))) + 
   theme_minimal() +
@@ -1175,3 +1175,22 @@ print(grafico_pequenos)
 
 ```
 
+### Resultados e discussão para os Municípios Pequenos
+
+A série histórica de 2019 a 2024, abrangendo 18 localidades, evidencia que a grande maioria desses municípios apresenta coberturas baixas, frequentemente abaixo de 10%, e que os poucos casos de melhora são exceções que confirmam a regra da estagnação ou do problema assistencial.
+
+O primeiro aspecto que se sobressai é a quase universalidade da cobertura extremamente baixa. Municípios como Benjamin Constant (AM), Mocajuba (PA), Darcinópolis (TO), São Bernardo (MA) e Catarina (CE) mantêm-se, ao longo de todo o período, com percentuais que raramente ultrapassam 15% e, na maioria dos anos, sequer atingem 10%. Benjamin Constant, por exemplo, oscila entre 0,8% e 1,5% durante toda a série, configurando uma situação de praticamente inexistência de rastreamento organizado. Mocajuba, que em 2019 registrava 30,9%, caiu para 7,3% em 2020 e permaneceu estagnado em torno de 6% a 7% nos anos seguintes. Darcinópolis apresenta comportamento semelhante: iniciou com 1,5%, teve um pico de 14,5% em 2020 e recuou para 6,4% em 2024. Esses padrões indicam não apenas baixa cobertura, mas também falta de sustentabilidade de eventuais esforços iniciais.
+
+Um segundo grupo de municípios chama a atenção por apresentar picos isolados seguidos de queda abrupta, sugerindo ações pontuais ou falhas de registro. Apodi (RN) é o caso mais emblemático: em 2020, atingiu 84,9% de cobertura, superando amplamente a meta de 70%, mas no ano seguinte despencou para 2,7%, mantendo-se em patamares baixos (entre 15% e 25%) até 2024. Esse movimento é um forte indicativo de que o pico pode ter sido resultado de um mutirão ou de um erro de notificação, e não de uma política contínua de rastreamento. Situação análoga ocorre em Caravelas (BA), que alcançou 31,6% em 2023 e caiu para 0,7% em 2024, e em Praia Grande (SC), que teve um pico de 116,5% em 2021, valor impossível para uma cobertura real, sugerindo provável erro de denominador ou duplicidade de registros, e recuou para 51,7% em 2022 e 4,5% em 2024.
+
+Um terceiro padrão identificado é o de municípios que apresentam melhora consistente, embora ainda distante da meta. Esse é o caso de Mirandiba (PE), que evoluiu de 2,7% em 2020 para 24,8% em 2024, e de Casa Nova (BA), que saiu de 4,2% em 2019 para 26,8% em 2024. Rio Brilhante (MS) também mostra crescimento gradual, passando de 3,9% para 40,6% no mesmo período. Esses exemplos demonstram que, mesmo em municípios pequenos, é possível ampliar a cobertura de forma sustentada, provavelmente por meio de organização do fluxo de referência, busca ativa e garantia de oferta regular de exames. No entanto, é importante destacar que, mesmo nesses casos, os valores permanecem muito abaixo do parâmetro de 70%, indicando que o esforço precisa ser ampliado.
+
+Por outro lado, há municípios que apresentam estagnação em níveis críticos, sem qualquer tendência clara de melhora. É o caso de Santa Maria da Boa Vista (PE), que oscila entre 2,6% e 9% ao longo de toda a série; Vila Boa (GO), que varia de 5,7% a 87,3% (com picos isolados em 2020 e 2021, seguidos de queda para 51,7% em 2022 e 4,5% em 2024); e Nonoai (RS), que se mantém entre 4,3% e 40,7%, com grande instabilidade. São Francisco do Glória (MG) também apresenta cobertura baixa e oscilante, entre 4,5% e 27,7%. Esses padrões sugerem que, nesses locais, o rastreamento não está institucionalizado como política pública, dependendo de ações episódicas que não garantem continuidade.
+
+Um caso que merece destaque é o de Silva Jardim (RJ), que iniciou a série com 40,4% em 2024, após oscilações entre 2,6% e 8,9% nos anos anteriores. Esse crescimento abrupto no último ano pode indicar uma melhora real, mas também levanta a necessidade de verificação da consistência dos dados, especialmente porque contrasta com a tendência anterior. Situação semelhante ocorre em Boa Vista da Aparecida (PR), que teve um pico de 34,2% em 2019, caiu para 6,9% em 2020 e se recuperou parcialmente para 70,9% em 2024, valor que, se confirmado, representa um dos poucos casos de alcance da meta, mas que precisa ser analisado com cautela diante da volatilidade da série.
+
+A análise conjunta desses padrões permite concluir que, nos municípios de pequeno porte, a cobertura de mamografia de rastreamento é estruturalmente insuficiente. Nenhum município apresentou cobertura sustentada acima de 70% ao longo de todo o período. Os melhores desempenhos, como os de Boa Vista da Aparecida e Rio Brilhante, ainda são exceções e, em vários casos, acompanhados de instabilidade. A maioria absoluta permanece em patamares que variam de 0% a 30%, o que significa que a maior parte da população-alvo não está sendo rastreada, aumentando o risco de diagnóstico tardio e mortalidade por câncer de mama.
+
+Do ponto de vista da gestão, a série histórica revela que o problema não é apenas de cobertura, mas também de confiabilidade e continuidade dos dados. Os picos inexplicáveis, como os de Apodi (84,9% em 2020), Praia Grande (116,5% em 2021) e Vila Boa (87,3% em 2021), sugerem falhas nos sistemas de informação ou ações pontuais que não se sustentam. Por outro lado, os municípios que conseguiram melhorar de forma consistente, como Mirandiba e Casa Nova, demonstram que intervenções bem planejadas podem produzir resultados positivos, servindo como referência para os demais.
+
+Em síntese, a série histórica da cobertura de mamografia em municípios de pequeno porte evidencia um cenário de fragilidade generalizada e descontinuidade, com poucos exemplos de sucesso e vários casos de estagnação ou retrocesso. A interpretação desses dados à luz das definições do INCA reforça a necessidade de se monitorar não apenas o valor anual, mas a tendência ao longo do tempo, identificando municípios que precisam de apoio urgente e aqueles que podem servir de modelo. A análise temporal é, portanto, um instrumento essencial para o planejamento de ações que visem ampliar o acesso ao rastreamento e reduzir a mortalidade por câncer de mama, especialmente em localidades onde a cobertura ainda é muito inferior à meta recomendada.
